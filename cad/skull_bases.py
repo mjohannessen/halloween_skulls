@@ -1,8 +1,9 @@
 """Generator for skull_bases.FCStd - the two skull bases:
 
   * Control_base_body - the master skull's base. Holds the Pico W (on
-    standoffs, micro-USB out the back wall) and a perfboard with the level
-    shifter, resistor and bulk cap. A link-cable hole in the right wall
+    standoffs, micro-USB out the back wall) and, stacked above it, a
+    perfboard with the level shifter, resistor and bulk cap. The perfboard
+    sits in four tall corner brackets, centred in the box. A link-cable hole in the right wall
     carries 5V / GND / data to the second skull.
   * Stand_body - the second skull's base. Same shell, empty inside; the
     link cable comes in through its left wall.
@@ -31,8 +32,8 @@ control base (its Placement) - the offset is display-only.
 
 The skull numbers (opening diameter and position) are measured from
 halloween-skull/skull.stl. The Pico W is the standard 51 x 21 mm board.
-The perfboard size is a placeholder - measure the real board and change
-PERF_L / PERF_W.
+The perfboard is measured (48.3 x 44.5 mm); its component height is still a
+placeholder.
 """
 
 import os
@@ -48,7 +49,7 @@ DOC_NAME = "skull_bases"
 PARAMS = [
     ("IN_X", 62.0, "inside width (X)"),
     ("IN_Y", 62.0, "inside depth (Y)"),
-    ("IN_Z", 24.0, "inside height (Z)"),
+    ("IN_Z", 29.0, "inside height (Z) - perfboard top + components + ~1 mm"),
     ("WALL", 2.5, "wall thickness"),
     ("FLOOR", 2.5, "floor thickness"),
 
@@ -75,10 +76,9 @@ PARAMS = [
 
     ("CRADLE_CLEAR", 0.4, "cradle clearance around PCB"),
     ("CRADLE_FENCE", 1.6, "cradle bracket wall thickness"),
-    ("CRADLE_LEDGE_H", 4.0, "PCB underside height in cradle (solder pin room)"),
     ("CRADLE_LEDGE_W", 1.5, "cradle ledge reach under the PCB"),
     ("CRADLE_FENCE_H", 3.0, "cradle fence height above the ledge"),
-    ("CRADLE_CORNER", 6.0, "cradle corner bracket arm length"),
+    ("CRADLE_CORNER", 8.0, "cradle corner bracket arm length"),
     ("PCB_T", 1.6, "perfboard thickness"),
 
     ("PICO_L", 51.0, "Pico W length (runs along Y, USB end at the back)"),
@@ -91,16 +91,17 @@ PARAMS = [
     ("PICO_STANDOFF_H", 5.0, "Pico standoff height"),
     ("PICO_STANDOFF_D", 5.0, "Pico standoff diameter"),
     ("PICO_PILOT_D", 1.8, "Pico standoff pilot hole (M2 self-tapping)"),
-    ("PICO_X0", 9.0, "Pico board X (left edge)"),
+    ("PICO_X0", 14.0, "Pico board X (left edge) - clears the perfboard's front-left bracket"),
     ("PICO_Y0", "=IN_Y - 1.5 - PICO_L", "Pico board Y (USB end 1.5 mm from back wall)"),
     ("USB_CUT_W", 12.0, "micro-USB slot width (room for plug overmold)"),
     ("USB_CUT_H", 8.0, "micro-USB slot height"),
 
-    ("PERF_L", 40.0, "perfboard size along Y (placeholder - measure)"),
-    ("PERF_W", 22.0, "perfboard size along X (placeholder - measure)"),
+    ("PERF_L", 44.5, "perfboard size along Y (measured)"),
+    ("PERF_W", 48.3, "perfboard size along X (measured)"),
     ("PERF_H", 10.0, "perfboard component height (placeholder)"),
-    ("PERF_X0", 34.0, "perfboard cradle X"),
-    ("PERF_Y0", 10.0, "perfboard cradle Y"),
+    ("PERF_Z", 16.0, "perfboard underside height - above the Pico, its USB plug and wires"),
+    ("PERF_X0", "=(IN_X - PERF_W) / 2 - CRADLE_CLEAR - CRADLE_FENCE", "perfboard cradle X (board centred)"),
+    ("PERF_Y0", "=(IN_Y - PERF_L) / 2 - CRADLE_CLEAR - CRADLE_FENCE", "perfboard cradle Y (board centred)"),
 
     ("LINK_HOLE_D", 6.0, "link cable hole (5V / GND / data to the other skull)"),
     ("LINK_Y", "=IN_Y / 2", "link cable hole centre Y"),
@@ -182,14 +183,15 @@ class Builder:
         return f
 
 
-def cradle(b, tag, x0, y0, L, W):
+def cradle(b, tag, x0, y0, L, W, ledge_h):
+    """Four L-shaped corner brackets; the PCB rests on their ledges at ledge_h."""
     ox = "(%s + 2 * (CRADLE_CLEAR + CRADLE_FENCE))" % L
     oy = "(%s + 2 * (CRADLE_CLEAR + CRADLE_FENCE))" % W
-    oz = "(CRADLE_LEDGE_H + CRADLE_FENCE_H)"
+    oz = "(%s + CRADLE_FENCE_H)" % ledge_h
     inset = "(CRADLE_FENCE + CRADLE_CLEAR + CRADLE_LEDGE_W)"
     outer = b.box(tag + "_outer", x0, y0, 0, ox, oy, oz)
     tools = [
-        b.box(tag + "_pocket", "%s + CRADLE_FENCE" % x0, "%s + CRADLE_FENCE" % y0, "CRADLE_LEDGE_H",
+        b.box(tag + "_pocket", "%s + CRADLE_FENCE" % x0, "%s + CRADLE_FENCE" % y0, ledge_h,
               "%s + 2 * CRADLE_CLEAR" % L, "%s + 2 * CRADLE_CLEAR" % W, oz),
         b.box(tag + "_under", "%s + %s" % (x0, inset), "%s + %s" % (y0, inset), -1,
               "%s - 2 * %s" % (ox, inset), "%s - 2 * %s" % (oy, inset), "%s + 2" % oz),
@@ -230,7 +232,7 @@ def build_control_base(b):
     for i, (hx, hy) in enumerate(PICO_HOLES, start=1):
         adds.append(b.cyl("Pico_standoff_%d" % i, "z", "PICO_X0 + " + hx, "PICO_Y0 + " + hy, 0,
                           "PICO_STANDOFF_D", "PICO_STANDOFF_H"))
-    adds.append(cradle(b, "Perf_cradle", "PERF_X0", "PERF_Y0", "PERF_W", "PERF_L"))
+    adds.append(cradle(b, "Perf_cradle", "PERF_X0", "PERF_Y0", "PERF_W", "PERF_L", "PERF_Z"))
     solid = b.fuse("Ctrl_solid", adds)
 
     for i, (hx, hy) in enumerate(PICO_HOLES, start=1):
@@ -283,7 +285,7 @@ def build_components(b):
         b.box("Pico_rf_can", "PICO_X0 + 4", "PICO_Y0 + 3", "%s + PICO_T" % pz, 13, 11, 2),
     ])
     off = "(CRADLE_FENCE + CRADLE_CLEAR)"
-    perf = b.box("Perfboard", "PERF_X0 + " + off, "PERF_Y0 + " + off, "CRADLE_LEDGE_H",
+    perf = b.box("Perfboard", "PERF_X0 + " + off, "PERF_Y0 + " + off, "PERF_Z",
                  "PERF_W", "PERF_L", "PCB_T + PERF_H")
     return [pico, perf]
 
