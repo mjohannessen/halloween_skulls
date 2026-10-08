@@ -58,3 +58,14 @@ Each source reaches VSYS through a diode, so both can be connected at once, for 
 Ready-to-print STLs are in `cad/stl/` (`control_base_body.stl`, `stand_body.stl`, `lid_x2.stl`, `battery_box_body.stl`, `battery_box_lid.stl`). After editing the `.FCStd`, re-export them from FreeCAD (File → Export).
 
 `cad/skull_bases.py` generated the document. Re-run it only to start over: `SKULL_OVERWRITE=1 freecadcmd skull_bases.py`. Without that variable it refuses to overwrite the existing `.FCStd`, so hand edits aren't lost.
+
+## Planned: low-battery alert
+
+The battery pack's boost converter holds its output at 5 V until the cells are nearly empty and then cuts off, so measuring the supply voltage gives no warning. The firmware will estimate the charge left instead:
+
+- **Power source:** the Pico W reads VBUS through the WiFi chip (`machine.Pin("WL_GPIO2")` in MicroPython). If USB isn't present, it's running on the battery.
+- **Charge estimate:** while on battery, the firmware adds up runtime weighted by LED brightness against the pack's ~30 Wh, and saves the total to flash every few minutes so it survives restarts. The counter resets when the pack is reconnected after charging.
+- **MQTT:** it publishes something like `skulls/status {"power":"battery","batt_hours":18.5,"batt_pct":62}`. Its last will publishes `offline` on the same topic, following led_flowerpot's command/reply/status pattern.
+- **openHAB:** at about 20% left, a rule pushes an ntfy alert. If the skulls go offline while on battery, it pushes "Skulls offline — battery probably dead".
+
+If the estimate turns out to be unreliable, an INA219 current sensor on the perfboard can measure the mAh actually used.
