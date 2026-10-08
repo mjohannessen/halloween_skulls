@@ -2,14 +2,19 @@
 
   * Control_base_body - the master skull's base. Holds the Pico W (on
     standoffs, micro-USB out the back wall) and, stacked above it, a
-    perfboard with the level shifter, resistor and bulk cap. The perfboard
-    sits in four tall corner brackets, centred in the box. A link-cable hole in the right wall
-    carries 5V / GND / data to the second skull.
+    perfboard with the level shifter, resistor, bulk cap and battery diode.
+    The perfboard sits in four tall corner brackets, centred in the box. A
+    link-cable hole in the right wall carries 5V / GND / data to the second
+    skull, and a DC5521 panel jack in the back wall (beside the micro-USB slot)
+    takes the battery pack's lead.
   * Stand_body - the second skull's base. Same shell, empty inside; the
     link cable comes in through its left wall.
   * Lid - one design, print two. A hollow locating tube on top drops into
     the skull's 18 mm base opening, so the skull sits centred on the lid and
     the eye LED wires run straight down through the tube into the box.
+  * Battery_box_body / Battery_box_lid - a plain tray for the 5 V 8 Ah pack,
+    with a full-height slot in its +X end wall for the lead, and a
+    friction-fit lid (no screws). Drawn BB_OFFSET in front of the bases.
 
 The .FCStd it writes is a normal parametric FreeCAD document - edit THAT
 file, not this script: every dimension is a cell in the "Params"
@@ -103,11 +108,26 @@ PARAMS = [
     ("PERF_X0", "=(IN_X - PERF_W) / 2 - CRADLE_CLEAR - CRADLE_FENCE", "perfboard cradle X (board centred)"),
     ("PERF_Y0", "=(IN_Y - PERF_L) / 2 - CRADLE_CLEAR - CRADLE_FENCE", "perfboard cradle Y (board centred)"),
 
+    ("JACK_D", 8.0, "DC5521 panel jack hole, back wall - 8 mm suits the M8-thread (DC-099) type; 11 mm for DC-022"),
+    ("JACK_X", "=IN_X - 20", "DC jack centre X - between the Pico and the back-right perfboard bracket"),
+    ("JACK_Z", 8.5, "DC jack centre Z - its body stays under the perfboard"),
+
     ("LINK_HOLE_D", 6.0, "link cable hole (5V / GND / data to the other skull)"),
     ("LINK_Y", "=IN_Y / 2", "link cable hole centre Y"),
     ("LINK_Z", 8.0, "link cable hole centre Z"),
 
     ("STAND_OFFSET", 100.0, "display-only: how far right Stand_body is drawn"),
+
+    ("BATT_L", 76.25, "battery pack length incl. 3 mm for its lead (measured 73.25 + 3); lead end at +X"),
+    ("BATT_W", 52.5, "battery pack width (measured)"),
+    ("BATT_H", 33.0, "battery pack height (measured)"),
+    ("BB_CLEAR", 1.0, "battery box clearance around the pack"),
+    ("BB_IN_X", "=BATT_L + 2 * BB_CLEAR", "battery box inside length"),
+    ("BB_IN_Y", "=BATT_W + 2 * BB_CLEAR", "battery box inside width"),
+    ("BB_IN_Z", "=BATT_H + LIP_H + 0.5", "battery box inside height - the lid lip stays above the pack"),
+    ("BB_LIP_CLEAR", 0.2, "battery box lid lip clearance (tighter than the bases: friction fit, no screws)"),
+    ("BB_SLOT_W", 6.0, "lead slot width, full height of the +X end wall (fits the cable, not the plug)"),
+    ("BB_OFFSET", 90.0, "display-only: how far in front (-Y) the battery box is drawn"),
 ]
 
 CORNER_FILLET = 3.0     # outer vertical edge radius
@@ -240,6 +260,7 @@ def build_control_base(b):
                            "PICO_PILOT_D", "PICO_STANDOFF_H"))
     holes.append(b.box("USB_slot", "%s - USB_CUT_W / 2" % USB_X, "IN_Y - 1", "%s - USB_CUT_H / 2" % USB_Z,
                        "USB_CUT_W", "WALL + 2", "USB_CUT_H"))
+    holes.append(b.cyl("Jack_hole", "y", "JACK_X", "IN_Y - 1", "JACK_Z", "JACK_D", "WALL + 2"))
     holes.append(b.cyl("Ctrl_link_hole", "x", "IN_X - 1", "LINK_Y", "LINK_Z", "LINK_HOLE_D", "WALL + 2"))
     return b.cut("Control_base_body", solid, b.fuse("Ctrl_holes", holes))
 
@@ -276,6 +297,32 @@ def build_lid(b):
     return b.cut("Lid", solid, b.fuse("Lid_holes", holes))
 
 
+def build_battery_box(b):
+    """Open tray for the battery pack; the lead leaves through a slot in the +X end wall."""
+    outer = b.box("BB_outer", "-WALL", "-WALL", "-FLOOR", "BB_IN_X + 2 * WALL", "BB_IN_Y + 2 * WALL", "BB_IN_Z + FLOOR")
+    rounded = b.fillet_vertical("BB_outer_rounded", outer, CORNER_FILLET)
+    tools = [b.box("BB_cavity", 0, 0, 0, "BB_IN_X", "BB_IN_Y", "BB_IN_Z + 1"),
+             b.box("BB_slot", "BB_IN_X - 1", "(BB_IN_Y - BB_SLOT_W) / 2", 0, "WALL + 2", "BB_SLOT_W", "BB_IN_Z + 1")]
+    body = b.cut("Battery_box_body", rounded, b.fuse("BB_cuts", tools))
+    body.setExpression("Placement.Base.y", b.expr("-BB_OFFSET"))
+    return body
+
+
+def build_battery_lid(b):
+    plate = b.box("BB_lid_plate_raw", "-WALL", "-WALL", "BB_IN_Z", "BB_IN_X + 2 * WALL", "BB_IN_Y + 2 * WALL", "LID_T")
+    rounded = b.fillet_vertical("BB_lid_plate", plate, CORNER_FILLET)
+    lip_outer = b.box("BB_lip_outer", "BB_LIP_CLEAR", "BB_LIP_CLEAR", "BB_IN_Z - LIP_H",
+                      "BB_IN_X - 2 * BB_LIP_CLEAR", "BB_IN_Y - 2 * BB_LIP_CLEAR", "LIP_H")
+    lip_cuts = [b.box("BB_lip_inner", "BB_LIP_CLEAR + LIP_W", "BB_LIP_CLEAR + LIP_W", "BB_IN_Z - LIP_H - 1",
+                      "BB_IN_X - 2 * (BB_LIP_CLEAR + LIP_W)", "BB_IN_Y - 2 * (BB_LIP_CLEAR + LIP_W)", "LIP_H + 2"),
+                b.box("BB_lip_slot", "BB_IN_X - LIP_W - 2", "(BB_IN_Y - BB_SLOT_W) / 2", "BB_IN_Z - LIP_H - 1",
+                      "LIP_W + 3", "BB_SLOT_W", "LIP_H + 1")]
+    lip = b.cut("BB_lip", lip_outer, b.fuse("BB_lip_cuts", lip_cuts))
+    lid = b.fuse("Battery_box_lid", [rounded, lip])
+    lid.setExpression("Placement.Base.y", b.expr("-BB_OFFSET"))
+    return lid
+
+
 def build_components(b):
     """Reference placeholders for checking fit - not printed."""
     pz = "PICO_STANDOFF_H"
@@ -287,7 +334,9 @@ def build_components(b):
     off = "(CRADLE_FENCE + CRADLE_CLEAR)"
     perf = b.box("Perfboard", "PERF_X0 + " + off, "PERF_Y0 + " + off, "PERF_Z",
                  "PERF_W", "PERF_L", "PCB_T + PERF_H")
-    return [pico, perf]
+    batt = b.box("Battery_pack", "BB_CLEAR", "BB_CLEAR", 0, "BATT_L", "BATT_W", "BATT_H")
+    batt.setExpression("Placement.Base.y", b.expr("BB_CLEAR - BB_OFFSET"))
+    return [pico, perf, batt]
 
 
 def out_dir():
@@ -307,6 +356,7 @@ def main():
     b = Builder(doc)
 
     ctrl, stand, lid = build_control_base(b), build_stand(b), build_lid(b)
+    bbox, blid = build_battery_box(b), build_battery_lid(b)
     comps = build_components(b)
     grp = doc.addObject("App::DocumentObjectGroup", "Components")
     for c in comps:
@@ -317,13 +367,14 @@ def main():
     if bad:
         raise RuntimeError("recompute failed: %s" % bad)
 
-    final = {ctrl, stand, lid, *comps}
+    final = {ctrl, stand, lid, bbox, blid, *comps}
     for o in doc.Objects:
         if hasattr(o, "Visibility") and o not in final and o is not grp:
             o.Visibility = False
     if App.GuiUp:
         import FreeCADGui as Gui
         lid.ViewObject.Transparency = 70
+        blid.ViewObject.Transparency = 70
         for c in comps:
             c.ViewObject.ShapeColor = (0.2, 0.5, 0.9)
         Gui.SendMsgToActiveView("ViewFit")
@@ -337,7 +388,11 @@ def main():
     shape.Placement = Placement()       # export the stand at the origin, not at STAND_OFFSET
     shape.exportStl(os.path.join(stl, "stand_body.stl"))
     lid.Shape.exportStl(os.path.join(stl, "lid_x2.stl"))
-    for o in (ctrl, stand, lid):
+    for o, fn in ((bbox, "battery_box_body.stl"), (blid, "battery_box_lid.stl")):
+        shape = o.Shape.copy()
+        shape.Placement = Placement()   # export at the origin, not at BB_OFFSET
+        shape.exportStl(os.path.join(stl, fn))
+    for o in (ctrl, stand, lid, bbox, blid):
         App.Console.PrintMessage("%s: valid=%s volume=%.0f mm3 bbox=%s\n"
                                  % (o.Name, o.Shape.isValid(), o.Shape.Volume, o.Shape.BoundBox))
     App.Console.PrintMessage("skull bases written to %s\n" % path)
