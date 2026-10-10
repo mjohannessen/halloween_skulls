@@ -34,17 +34,40 @@ DC jack − ── GND (common to the Pico, shifter and chain output)
 ```
 
 - **The LEDs run straight from the DC jack**, not through the Pico, so the chain's current doesn't pass through the Pico or the diode.
-- **The Pico runs from VSYS**, fed through diodes from the jack and from USB. Both can be connected at once without either back-feeding the other.
+- **The Pico runs from VSYS**, fed through diodes from the jack and from USB. Both can be connected at once without either back-feeding the other. VSYS sits at about 4.7V either way (5V less one diode drop).
 - **USB alone doesn't power the chain.** USB is for flashing, so a laptop's USB port never has to supply the LEDs.
-- **Supply sense:** a 10 kΩ / 15 kΩ divider puts about 3.0V on GP28 when the jack has power. The firmware reads it and doesn't drive the chain on USB power alone, because the unpowered LEDs would draw current from the data line.
+- **Supply sense:** a 10 kΩ / 15 kΩ divider puts about 3.0V on GP28 when the jack has power, and the 15 kΩ pulls it to 0V when it doesn't. On USB alone the shifter is still powered from VSYS but the chain isn't, so a high on the data line would feed current into the first LED's data input. The firmware reads GP28 and holds GP0 low unless the jack has power.
 
 ### Data
 
 ```
-Pico GP0 ── 74AHCT125 ── 330 Ω ── chain output DATA
+Pico GP0 ── 74AHCT125 1A → 1Y ── 330 Ω ── chain output DATA
 ```
 
-The 74AHCT125 shifts the Pico's 3.3V data up to about 4.7V, because 3.3V is below the LEDs' 0.7 × VDD input threshold. Tie its unused inputs to GND and its unused enables (1OE…4OE) to VCC. Tie its used enable (1OE) to GND. The 330 Ω resistor sits at the shifter's output and protects the first LED's data input.
+The 74AHCT125 shifts the Pico's 3.3V data up to VSYS, about 4.7V, because 3.3V is below the LEDs' 0.7 × 5V = 3.5V input threshold. Only channel 1 is used. The 330 Ω resistor sits at the shifter's output and protects the first LED's data input.
+
+### Wiring list
+
+Every connection in the box, grouped by net. Pico pin numbers are the physical pins (pin 1 is GP0, next to the USB connector). Do **not** connect anything to the Pico's VBUS (pin 40); the jack feeds VSYS only, through the diode.
+
+| Net | Connects |
+|---|---|
+| **5V (jack)** | DC jack + (centre pin) · 1N5817 anode · 10 kΩ · 1000 µF + leg · JST output red (5V) |
+| **VSYS** | 1N5817 cathode (banded end) · Pico pin 39 (VSYS) · 74AHCT125 pin 14 (VCC) · pin 4 (2OE) · pin 10 (3OE) · pin 13 (4OE) · 0.1 µF |
+| **GND** | DC jack − (sleeve) · Pico pin 38 (GND) · 74AHCT125 pin 7 (GND) · pin 1 (1OE) · pin 5 (2A) · pin 9 (3A) · pin 12 (4A) · 15 kΩ · 1000 µF − leg (striped side) · 0.1 µF · JST output GND |
+| **Sense** | 10 kΩ · 15 kΩ · Pico pin 34 (GP28 / ADC2) |
+| **Data in** | Pico pin 1 (GP0) · 74AHCT125 pin 2 (1A) |
+| **Data out** | 74AHCT125 pin 3 (1Y) · 330 Ω |
+| **Chain DATA** | 330 Ω · JST output DATA |
+
+74AHCT125 pins 6 (2Y), 8 (3Y) and 11 (4Y) are outputs and stay unconnected. Its enables are active-low, so 1OE to GND turns channel 1 on and 2OE–4OE to VCC turn the unused channels off. The unused inputs go to GND so they don't float.
+
+Build notes:
+
+- **Placement:** the 0.1 µF goes right at the shifter's pins 14 and 7. The 1000 µF goes where the jack and the JST output wires land on the perfboard, so the chain's current doesn't run through the shifter's ground.
+- **Wire gauge:** the jack-to-output 5V and GND carry the whole chain's current (up to 2 A on the 2 A brick), so use 22 AWG there. The Pico and signal wires can be thinner.
+- **Wires to the Pico:** with the Pico's USB end at the back wall and its pins facing up, pins 34, 38 and 39 are on the edge facing the perfboard. GP0 (pin 1) is on the edge against the side wall, so its wire crosses the USB end of the board.
+- **Checks before plugging in ornaments:** with only the jack connected, measure about 5V at the JST output's 5V/GND, about 4.7V at VSYS and at the shifter's pin 14, and about 3.0V at GP28. With only USB connected, the JST output's 5V should read 0V.
 
 ## Chain connector
 
@@ -134,7 +157,7 @@ JST-SM connectors and 22 AWG chain wire are good for about 3 A. Above roughly 30
 | Part | Qty | Notes |
 |---|---|---|
 | Raspberry Pi Pico W | 1 | Solder wires directly to it rather than fitting headers |
-| 74AHCT125 (or SN74AHCT1G125) level shifter | 1 | 3.3V → 5V data |
+| 74AHCT125 level shifter, DIP-14 | 1 | 3.3V → 5V data. The wiring list uses its DIP-14 pin numbers |
 | 330 Ω resistor | 1 | In series with the data line, at the shifter output |
 | 1N5817 (or SS14) Schottky diode | 1 | DC jack + → VSYS |
 | 10 kΩ and 15 kΩ resistors | 1 each | Supply-sense divider to GP28 |
