@@ -141,8 +141,11 @@ JST-SM connectors and 22 AWG chain wire are good for about 3 A. Above roughly 30
 | 1000 µF 10V electrolytic capacitor | 1 | Across 5V / GND at the chain output, absorbs inrush when ornaments are plugged in |
 | 0.1 µF ceramic capacitor | 1 | Across the 74AHCT125's VCC / GND |
 | Perfboard | 1 | Holds the shifter, resistors, diode and capacitors |
-| DC5521 (5.5 × 2.1 mm) panel-mount jack, M8 thread (DC-099 type) | 1 | Power input |
+| DC5521 (5.5 × 2.1 mm) female panel-mount barrel jack | 1 | Power input. The same jack as lr_light: 10.75 mm thread in an 11.2 mm hole |
 | JST-SM 3-pin female pigtail | 1 | Chain output, through the box wall |
+| M3 heat-set inserts and M3 × 6 mm screws | 4 each | Lid to corner posts |
+| M2 self-tapping screws, ~5 mm | 4 | Pico W to its standoffs |
+| Small zip tie | 1 | Anchors the output pigtail inside the box |
 
 ### Power
 
@@ -169,9 +172,26 @@ JST-SM connectors and 22 AWG chain wire are good for about 3 A. Above roughly 30
 
 ## Enclosure (`cad/`)
 
-`cad/skull_bases.FCStd` and `cad/skull_bases.py` are the **earlier two-skull design**: a control base under the master skull, a stand for the second skull and a JST link between them. They still need redoing for this design: a standalone control box (Pico W, perfboard, DC jack, micro-USB access, JST output) and a base for each skull with its input and output pigtails.
+### Control box
 
-The parametric approach stays the same. Every dimension is a cell in the document's `Params` spreadsheet, so edit a cell and press Recompute. `skull_bases.py` regenerates the document from scratch, and only runs with `SKULL_OVERWRITE=1 freecadcmd skull_bases.py`, so hand edits aren't lost.
+`cad/control_box.FCStd` is the control box and its lid. The box is 88.8 × 77 mm outside and 29 mm tall with the lid on. Every dimension is a cell in the document's `Params` spreadsheet, so edit a cell and press Recompute.
+
+- **Inside:** the Pico W sits on four 5 mm standoffs along the left side, with M2 self-tapping screws. The perfboard sits beside it in a floor cradle, 4 mm up for solder-joint clearance, with no screws.
+- **Back wall:** everything plugs in here: the micro-USB slot at the Pico's USB end, the DC jack (11.2 mm hole) and a 5 mm hole for the JST-SM output pigtail's wires. A zip-tie anchor on the floor behind the pigtail hole takes the pull off the solder joints.
+- **Lid:** a flat plate whose lip drops 3 mm inside the walls to locate it. Four M3 screws hold it on, through counterbored holes into heat-set inserts in the corner posts.
+- **Printing:** print the body open side up and the lid flat face down, both without supports.
+
+| File | What it is |
+|---|---|
+| `control_box.FCStd` | **The model, edit this.** `Control_box_body` and `Control_box_lid` are the printed parts. The `Components` group holds placeholders (Pico, perfboard, jack, pigtail) for checking fit and isn't printed |
+| `stl/control_box_body.stl`, `stl/control_box_lid.stl` | Ready-to-print exports. After editing, re-export with File → Export on each part |
+| `control_box.py` | Generates the `.FCStd` from scratch. It only overwrites with `SKULL_OVERWRITE=1 freecadcmd control_box.py`, so hand edits aren't lost |
+
+The perfboard size (48.3 × 44.5 mm), the jack's thread (10.75 mm), its body length inside the box (10 mm) and its nut (14 mm) are measured. The perfboard's components are taken as 12 mm tall (`PERF_H`, with the 1000 µF capacitor lying on its side), which leaves about 6 mm under the lid for wiring. Check them against the built board before printing.
+
+### Earlier two-skull design
+
+`cad/skull_bases.FCStd` and `cad/skull_bases.py` are the earlier design: a control base under the master skull, a stand for the second skull and a JST link between them. The control box and the cemetery-stone skull bases replace them. Only the battery box (`Battery_box_body` / `Battery_box_lid`) is still useful.
 
 ## Planned: low-battery alert
 
