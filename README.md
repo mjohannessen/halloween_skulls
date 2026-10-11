@@ -2,7 +2,7 @@
 
 3D-printed Halloween ornaments lit by 5V NeoPixels, driven from one control box and controlled from openHAB.
 
-The control box holds a Raspberry Pi Pico W. It has a power input and one output connector, which carries 5V, GND and data out to a chain of **ornaments**. Each ornament has an input and an output connector and holds one or more 5V NeoPixels. Ornaments plug into each other in any order and any mix, and all their LEDs form one NeoPixel chain:
+The control box holds a Raspberry Pi Pico 2 W. It has a power input and one output connector, which carries 5V, GND and data out to a chain of **ornaments**. Each ornament has an input and an output connector and holds one or more 5V NeoPixels. Ornaments plug into each other in any order and any mix, and all their LEDs form one NeoPixel chain:
 
 ```
 control box ─► ornament 1 ─► ornament 2 ─► … ─► ornament N (output unused)
@@ -27,8 +27,8 @@ DC jack + ──┬── chain output 5V (1000 µF across 5V / GND)
             │                                        │
             │   micro-USB ── VBUS ── Pico's onboard diode ──┘
             │
-            └── 10 kΩ ──┬── GP28 (supply sense)
-                        └── 15 kΩ ── GND
+            └── 4.7 kΩ ──┬── GP28 (supply sense)
+                         └── 4.7 kΩ ── GND
 
 DC jack − ── GND (common to the Pico, shifter and chain output)
 ```
@@ -36,29 +36,29 @@ DC jack − ── GND (common to the Pico, shifter and chain output)
 - **The LEDs run straight from the DC jack**, not through the Pico, so the chain's current doesn't pass through the Pico or the diode.
 - **The Pico runs from VSYS**, fed through diodes from the jack and from USB. Both can be connected at once without either back-feeding the other. VSYS sits at about 4.7V either way (5V less one diode drop).
 - **USB alone doesn't power the chain.** USB is for flashing, so a laptop's USB port never has to supply the LEDs.
-- **Supply sense:** a 10 kΩ / 15 kΩ divider puts about 3.0V on GP28 when the jack has power, and the 15 kΩ pulls it to 0V when it doesn't. On USB alone the shifter is still powered from VSYS but the chain isn't, so a high on the data line would feed current into the first LED's data input. The firmware reads GP28 and holds GP0 low unless the jack has power.
+- **Supply sense:** a 4.7 kΩ / 4.7 kΩ divider puts about 2.5V on GP28 when the jack has power (measured 2.50V), and the lower resistor pulls it to 0V when it doesn't. Other pairs work too if the junction stays between about 2V and 3.2V, i.e. the GND-side resistor is 1–1.5× the jack-side one (10 kΩ / 15 kΩ gives 3.0V); the firmware treats above ~1.5V as "jack present". On USB alone the shifter is still powered from VSYS but the chain isn't, so a high on the data line would feed current into the first LED's data input. The firmware reads GP28 and holds GP22 low unless the jack has power.
 
 ### Data
 
 ```
-Pico GP0 ── 74AHCT125 1A → 1Y ── 330 Ω ── chain output DATA
+Pico GP22 ── 74AHCT125 1A → 1Y ── 330–470 Ω ── chain output DATA
 ```
 
-The 74AHCT125 shifts the Pico's 3.3V data up to VSYS, about 4.7V, because 3.3V is below the LEDs' 0.7 × 5V = 3.5V input threshold. Only channel 1 is used. The 330 Ω resistor sits at the shifter's output and protects the first LED's data input.
+The 74AHCT125 shifts the Pico's 3.3V data up to VSYS, about 4.7V, because 3.3V is below the LEDs' 0.7 × 5V = 3.5V input threshold. Only channel 1 is used. The 330–470 Ω resistor (anything in that range works) sits at the shifter's output, limiting current into the first LED's data input and damping ringing on the line.
 
 ### Wiring list
 
-Every connection in the box, grouped by net. Pico pin numbers are the physical pins (pin 1 is GP0, next to the USB connector). Do **not** connect anything to the Pico's VBUS (pin 40); the jack feeds VSYS only, through the diode.
+Every connection in the box, grouped by net. Pico pin numbers are the physical pins (pin 1 is GP0, next to the USB connector; pins 21–40 run back up the other edge, so pin 40 is opposite pin 1). Do **not** connect anything to the Pico's VBUS (pin 40); the jack feeds VSYS only, through the diode.
 
 | Net | Connects |
 |---|---|
-| **5V (jack)** | DC jack + (centre pin) · 1N5817 anode · 10 kΩ · 1000 µF + leg · JST output red (5V) |
+| **5V (jack)** | DC jack + (centre pin) · 1N5817 anode · 4.7 kΩ (top) · 1000 µF + leg · JST output red (5V) |
 | **VSYS** | 1N5817 cathode (banded end) · Pico pin 39 (VSYS) · 74AHCT125 pin 14 (VCC) · pin 4 (2OE) · pin 10 (3OE) · pin 13 (4OE) · 0.1 µF |
-| **GND** | DC jack − (sleeve) · Pico pin 38 (GND) · 74AHCT125 pin 7 (GND) · pin 1 (1OE) · pin 5 (2A) · pin 9 (3A) · pin 12 (4A) · 15 kΩ · 1000 µF − leg (striped side) · 0.1 µF · JST output GND |
-| **Sense** | 10 kΩ · 15 kΩ · Pico pin 34 (GP28 / ADC2) |
-| **Data in** | Pico pin 1 (GP0) · 74AHCT125 pin 2 (1A) |
-| **Data out** | 74AHCT125 pin 3 (1Y) · 330 Ω |
-| **Chain DATA** | 330 Ω · JST output DATA |
+| **GND** | DC jack − (sleeve) · Pico pin 38 (GND) · 74AHCT125 pin 7 (GND) · pin 1 (1OE) · pin 5 (2A) · pin 9 (3A) · pin 12 (4A) · 4.7 kΩ (bottom) · 1000 µF − leg (striped side) · 0.1 µF · JST output GND |
+| **Sense** | 4.7 kΩ (top) · 4.7 kΩ (bottom) · Pico pin 34 (GP28 / ADC2) |
+| **Data in** | Pico pin 29 (GP22) · 74AHCT125 pin 2 (1A) |
+| **Data out** | 74AHCT125 pin 3 (1Y) · 330–470 Ω |
+| **Chain DATA** | 330–470 Ω · JST output DATA |
 
 74AHCT125 pins 6 (2Y), 8 (3Y) and 11 (4Y) are outputs and stay unconnected. Its enables are active-low, so 1OE to GND turns channel 1 on and 2OE–4OE to VCC turn the unused channels off. The unused inputs go to GND so they don't float.
 
@@ -66,8 +66,110 @@ Build notes:
 
 - **Placement:** the 0.1 µF goes right at the shifter's pins 14 and 7. The 1000 µF goes where the jack and the JST output wires land on the perfboard, so the chain's current doesn't run through the shifter's ground.
 - **Wire gauge:** the jack-to-output 5V and GND carry the whole chain's current (up to 2 A on the 2 A brick), so use 22 AWG there. The Pico and signal wires can be thinner.
-- **Wires to the Pico:** with the Pico's USB end at the back wall and its pins facing up, pins 34, 38 and 39 are on the edge facing the perfboard. GP0 (pin 1) is on the edge against the side wall, so its wire crosses the USB end of the board.
-- **Checks before plugging in ornaments:** with only the jack connected, measure about 5V at the JST output's 5V/GND, about 4.7V at VSYS and at the shifter's pin 14, and about 3.0V at GP28. With only USB connected, the JST output's 5V should read 0V.
+- **Wires to the Pico:** with the Pico's USB end at the back wall and its pins facing up, every Pico pin used (29, 34, 38 and 39) is on the edge facing the perfboard. The data pin is GP22 (pin 29) rather than GP0 for that reason: GP0 (pin 1) is on the far edge, so its wire would cross the USB end of the board.
+- **Checks before plugging in ornaments:** with only the jack connected, measure about 5V at the JST output's 5V/GND, about 4.7V at VSYS and at the shifter's pin 14, and about 2.5V at GP28. With only USB connected, the JST output's 5V should read 0V.
+
+### Wiring procedure
+
+Step by step, in an order that lets each part be checked before the next goes on. Tick a step when it's done. The board has **two separate positive rails**: **VSYS** (the diode's output, feeding the Pico and the shifter) and **5V (jack)** (feeding the chain). They differ by one diode drop and must never be joined. Ground is one common rail.
+
+Pico pins used: **39** (VSYS), **38** (GND), **34** (GP28, supply sense) and **29** (GP22, data). Nothing goes to pin 40 (VBUS).
+
+There are two separate 5v rails: one for the pico and 74AHCT125 and one for the LED power. All grounds are connected.
+
+**Shifter**
+
+- [x] 1. 74AHCT125 pins 4, 10, 13 and 14 to the VSYS rail.
+- [x] 2. 74AHCT125 pins 1, 5, 7, 9 and 12 to the GND rail.
+- [x] 3. 0.1 µF between 74AHCT125 pins 7 and 14, as close to the chip as it will go.
+- [x] 4. 330–470 Ω from 74AHCT125 pin 3 (1Y) to a free row. Its other end takes the JST DATA wire in step 9.
+
+Pins 2, 6, 8 and 11 are still open at this point: pin 2 gets the Pico in step 10, and 6, 8 and 11 stay unconnected.
+
+**Power** (22 AWG for the jack and chain 5V/GND)
+
+- [x] 5. DC jack + (centre pin) to the 5V (jack) rail, DC jack − (sleeve) to the GND rail.
+- [x] 6. 1000 µF across the 5V (jack) rail and GND, where the jack wires land: + leg to 5V, striped − leg to GND.
+- [x] 7. 1N5817: anode (plain end) on the 5V (jack) rail, cathode (banded end) on the VSYS rail.
+- [x] 8. Supply sense: 4.7 kΩ from the 5V (jack) rail to a free row (the sense row), 4.7 kΩ from the sense row to GND.
+- [x] 9. JST output pigtail: red (5V) to the 5V (jack) rail, GND to the GND rail, DATA to the free end of the data resistor.
+
+**Pico** (jack unplugged)
+
+- [x] 10. Pico pin 39 (VSYS) to the VSYS rail, pin 38 (GND) to the GND rail, pin 34 (GP28) to the sense row, pin 29 (GP22) to 74AHCT125 pin 2 (1A).
+
+Wiring is then complete: run the test routine below before plugging in any ornament.
+
+### Test routine
+
+Each stage only adds one thing (power source, software, then LEDs), so a fault shows up at the stage that introduced it. Stop at the first reading that's off. **No ornaments are plugged in until stage 5.** The sense voltage is about **2.5V** with the 4.7 kΩ / 4.7 kΩ divider (3.0V with 10 kΩ / 15 kΩ), written "sense V" below.
+
+**Stage 1: unpowered** (jack and USB both unplugged)
+
+Continuity mode, meter leads on the points named:
+
+| # | Between | Expect | If not |
+|---|---|---|---|
+| 1.1 | 5V (jack) rail and GND | No beep (a brief chirp is the 1000 µF charging) | Short on the chain supply |
+| 1.2 | VSYS rail and GND | No beep | Short on the Pico/shifter supply |
+| 1.3 | 5V (jack) rail and VSYS rail | No beep | The two rails are joined somewhere, or the diode is shorted |
+| 1.4 | Pico pin 39 and VSYS rail · pin 38 and GND · pin 34 and the sense row · pin 29 and shifter pin 2 | Beep, each | That wire isn't connected |
+| 1.5 | Shifter pin 1 and GND · pin 4 and VSYS | Beep, each | Enable pins swapped (pin 1 must be GND) |
+| 1.6 | Shifter pin 3 and JST DATA (resistance mode) | 330–470 Ω | Data resistor missing or on the wrong row |
+| 1.7 | JST red and the 5V (jack) rail · JST GND and GND | Beep, each | Pigtail miswired. Check its wire colours against the [chain connector](#chain-connector) table |
+
+Diode mode, red lead on the 5V (jack) rail, black on VSYS:
+
+| # | Expect | If not |
+|---|---|---|
+| 1.8 | About 0.15–0.35V. Swap the leads: OL (open) | Reads OL both ways: diode not in circuit. Low reading only with the leads swapped: diode is backwards |
+
+**Stage 2: USB only** (Pico on the Pi 4's USB, jack unplugged)
+
+| # | Measure | Expect | If not |
+|---|---|---|---|
+| 2.1 | Pi 4: `lsusb` | A Raspberry Pi device (`2e8a:`) | Pico not powered or bad cable |
+| 2.2 | VSYS rail to GND | About 4.6–4.9V (USB through the Pico's own diode) | Pico's VSYS wire, or a short loading it down |
+| 2.3 | Shifter pin 14 to pin 7 | Same as 2.2 | Shifter VCC/GND wiring |
+| 2.4 | 5V (jack) rail and JST red to GND | 0V (a few tenths at most) | Near 4.5V: USB is feeding the chain, so the diode is backwards or the rails are joined |
+| 2.5 | Sense row to GND | 0V | Divider fed from VSYS instead of the jack rail |
+
+Then flash MicroPython (Pico 2 W build: `sudo picotool load -x ~/micropython-pico2-w.uf2` on the Pi 4, with the Pico in BOOTSEL mode) and, still on USB only:
+
+| # | Test | Expect | If not |
+|---|---|---|---|
+| 2.6 | Read GP28 (ADC2) | Under 0.2V | Same as 2.5 |
+| 2.7 | Drive GP22 high, measure JST DATA to GND | About 4.7V (same as VSYS) | 0V: no shifter output. Check pin 1 (1OE) on GND, pin 2 wired to pin 29 |
+| 2.8 | Drive GP22 low | 0V | Stuck high: pin 2 not reaching GP22 |
+
+**Stage 3: jack only** (brick or battery pack, USB unplugged)
+
+| # | Measure | Expect | If not |
+|---|---|---|---|
+| 3.1 | 5V (jack) rail and JST red to GND | About 5.0V | Jack wiring, or centre/sleeve swapped (reads −5V) |
+| 3.2 | VSYS rail to GND | About 4.7V (0.2–0.35V below 3.1) | Same as 3.1: jack is wired straight to VSYS. 0V: diode open or backwards |
+| 3.3 | Sense row to GND | Sense V | Divider wiring |
+
+**Stage 4: jack and USB together**
+
+| # | Test | Expect | If not |
+|---|---|---|---|
+| 4.1 | VSYS rail | About 4.7–4.9V, whichever supply is higher | — |
+| 4.2 | Read GP28 | Sense V (firmware treats above ~1.5V as "jack present") | Pin 34 wire |
+| 4.3 | Unplug the jack, watch GP28 | Falls below 1.5V ("no jack") and keeps falling toward 0V. With no ornaments it takes 10–20 s: the only drain on the 1000 µF is the divider (9.4 kΩ × 1000 µF ≈ 9 s time constant). With ornaments plugged in it drops much faster | Stays at sense V: the GND-side divider resistor is missing |
+
+**Stage 5: first light** (jack and USB connected)
+
+| # | Test | Expect | If not |
+|---|---|---|---|
+| 5.1 | Plug in **one** skull. Light LED 0 red, then green, then blue, then white, at low brightness | Each colour as named | Wrong colours: the LED's colour order differs. WS2812D is GRB, PL9823 is RGB, so the firmware's order setting must match. Nothing: check the skull's DATA isn't on its output side, and the pigtail order |
+| 5.2 | Add the other two skulls. Light each LED in turn (0, 1, 2), then all three | One skull at a time, in chain order, then all | A skull and every one after it dark: that skull's DIN/DOUT or its output pigtail |
+| 5.3 | All three white at full brightness for a minute, measure JST red to GND | Still about 5V, nothing warm | Supply sagging under load, or a bad joint heating up |
+| 5.4 | With LEDs lit, unplug the jack (USB still in) | LEDs go dark and stay dark | Power is reaching the chain from USB (recheck 2.4) |
+
+**Results (2026-10-11, breadboard build):** every stage passed. USB only: VSYS 4.68V, jack rail 0.01V, GP28 0.004V, shifter pin 2 3.29V / pin 3 4.68V with GP22 high, 0V low. Jack + USB: GP28 2.50V, held at 2.50V through 90 s of all three skulls at full white (no sag). Unplugging the jack: GP28 under 1.5V in ~15 s with no ornaments, ~5 s with three skulls lit, and the skulls went dark on USB alone. The skull LEDs are **GRB** (WS2812D type, MicroPython's default `NeoPixel` order): red, green, blue and white all showed as sent, and the three skulls lit in chain order.
+
+**Battery pack (2026-10-11):** on the KBT 5V pack alone (USB unplugged), three skulls glowing dim red (40,0,0) plus the Pico ran 17.5 minutes with the sense steady at 2.52V (5.04V out) and no auto-shutoff, so the pack is fine at this low a load. The test program logged uptime to the Pico's flash every 30 s; it's a temporary `main.py`, not the real firmware.
 
 ## Chain connector
 
@@ -156,18 +258,18 @@ JST-SM connectors and 22 AWG chain wire are good for about 3 A. Above roughly 30
 
 | Part | Qty | Notes |
 |---|---|---|
-| Raspberry Pi Pico W | 1 | Solder wires directly to it rather than fitting headers |
+| Raspberry Pi Pico 2 W | 1 | Solder wires directly to it rather than fitting headers |
 | 74AHCT125 level shifter, DIP-14 | 1 | 3.3V → 5V data. The wiring list uses its DIP-14 pin numbers |
-| 330 Ω resistor | 1 | In series with the data line, at the shifter output |
+| 330–470 Ω resistor | 1 | In series with the data line, at the shifter output. Any value in that range |
 | 1N5817 (or SS14) Schottky diode | 1 | DC jack + → VSYS |
-| 10 kΩ and 15 kΩ resistors | 1 each | Supply-sense divider to GP28 |
+| 4.7 kΩ resistors | 2 | Supply-sense divider to GP28. Other pairs work, see [Power](#power) |
 | 1000 µF 10V electrolytic capacitor | 1 | Across 5V / GND at the chain output, absorbs inrush when ornaments are plugged in |
 | 0.1 µF ceramic capacitor | 1 | Across the 74AHCT125's VCC / GND |
 | Perfboard | 1 | Holds the shifter, resistors, diode and capacitors |
 | DC5521 (5.5 × 2.1 mm) female panel-mount barrel jack | 1 | Power input. The same jack as lr_light: 10.75 mm thread in an 11.2 mm hole |
 | JST-SM 3-pin female pigtail | 1 | Chain output, through the box wall |
 | M3 heat-set inserts and M3 × 6 mm screws | 4 each | Lid to corner posts |
-| M2 self-tapping screws, ~5 mm | 4 | Pico W to its standoffs |
+| M2 self-tapping screws, ~5 mm | 4 | Pico 2 W to its standoffs |
 | Small zip tie | 1 | Anchors the output pigtail inside the box |
 
 ### Power
@@ -199,7 +301,7 @@ JST-SM connectors and 22 AWG chain wire are good for about 3 A. Above roughly 30
 
 `cad/control_box.FCStd` is the control box and its lid. The box is 88.8 × 77 mm outside and 29 mm tall with the lid on. Every dimension is a cell in the document's `Params` spreadsheet, so edit a cell and press Recompute.
 
-- **Inside:** the Pico W sits on four 5 mm standoffs along the left side, with M2 self-tapping screws. The perfboard sits beside it in a floor cradle, 4 mm up for solder-joint clearance, with no screws.
+- **Inside:** the Pico 2 W sits on four 5 mm standoffs along the left side, with M2 self-tapping screws. The perfboard sits beside it in a floor cradle, 4 mm up for solder-joint clearance, with no screws.
 - **Back wall:** everything plugs in here: the micro-USB slot at the Pico's USB end, the DC jack (11.2 mm hole) and a 5 mm hole for the JST-SM output pigtail's wires. A zip-tie anchor on the floor behind the pigtail hole takes the pull off the solder joints.
 - **Lid:** a flat plate whose lip drops 3 mm inside the walls to locate it. Four M3 screws hold it on, through counterbored holes into heat-set inserts in the corner posts.
 - **Printing:** print the body open side up and the lid flat face down, both without supports.
