@@ -2,3 +2,4 @@
 *.blend1
 __pycache__/
 *.FCBak
+wifi_secrets.py

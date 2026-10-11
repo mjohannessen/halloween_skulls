@@ -240,6 +240,53 @@ CHAIN = [
 
 The total LED count is the sum of the counts. Effects address ornaments by position in the list, so a mixed chain needs only this list changed, with no change to the effect code. The plan is to make the layout settable over MQTT, so rearranging ornaments doesn't need a reflash.
 
+## Firmware
+
+MicroPython (v1.28 on the Pico 2 W), in `firmware/`, following led_flowerpot's and lr_light's structure:
+
+| File | What it is |
+|---|---|
+| `skulls_controller.py` | Deployed as `main.py`. `CHAIN`, command protocol (`HELP_TEXT`), patterns, jack-sense data hold-off, watchdog. |
+| `net_mqtt.py` | Wi-Fi + MQTT client (the same as lr_light's, on `skulls/*`). Forwards each `skulls/command` message into `handle_command()`. |
+| `wifi_secrets.py` | `WIFI_SSID` / `WIFI_PASSWORD`. Gitignored, never committed; the same file the flowerpot and lamp use, kept on the Pi 4. |
+
+Commands, over MQTT or USB serial: `ON`, `OFF`, `COLOR <zone> r,g,b`, `PATTERN <zone> heartbeat|flicker|breathe|rainbow [args]`, `BRIGHTNESS 0-100`, `SET STARTUP <command>`, `STATUS`, `HELP`. A zone is `all` or an ornament number from `CHAIN` (1 = nearest the box). `HELP_TEXT` is the full reference. Notes:
+
+- **Heartbeat** uses the same lub-dub curve as the flowers' scary stems. A pattern sent to `all` runs on one clock, so every skull beats together.
+- **`ON` resumes** the last patterns. It boots **OFF** (`SET STARTUP` can change that), since openHAB's Halloween scene decides when the skulls run.
+- **Jack sense:** every tick it reads GP28; without jack power it stops sending data and holds GP22 low. STATUS reports it as `jack=on|off`.
+- **Status:** `power=… jack=… brightness=… ornaments=…`, then one `zone=… pattern=… color=… period=…` line per group of ornaments sharing a pattern.
+
+### MQTT topics
+
+Broker: the Mac Mini's Mosquitto, `192.168.1.220:1883`, anonymous.
+
+| Topic | Direction | Payload |
+|---|---|---|
+| `skulls/command` | in | One command per message |
+| `skulls/reply` | out, retained | `OK`, `ERR <type>: <message>`, the STATUS lines, or the HELP text |
+| `skulls/status` | out, retained | LWT availability only: `online` / `offline` |
+| `skulls/power` | out, retained | `ON` / `OFF`, republished whenever it changes. openHAB's switch uses it as its state topic |
+
+### Deploying
+
+From the Pi 4 (192.168.1.161), with the Pico on its USB:
+
+```bash
+# on Mac
+scp firmware/skulls_controller.py firmware/net_mqtt.py pi@192.168.1.161:~/Documents/halloween_skulls/firmware/
+# on the Pi
+cd ~/Documents/halloween_skulls/firmware
+cp ~/Documents/led_flowerpot/firmware/wifi_secrets.py .   # first time only
+mpremote connect /dev/ttyACM0 mip install umqtt.simple    # first time only
+mpremote connect /dev/ttyACM0 cp net_mqtt.py :net_mqtt.py + cp wifi_secrets.py :wifi_secrets.py + cp skulls_controller.py :main.py + reset
+```
+
+### Integration
+
+- **openHAB** (house-brain): `things/halloween_skulls.things` (`mqtt:topic:skulls` on the broker bridge), `items/halloween_skulls.items` (`Skulls_Power`, `Skulls_Status`), a "Halloween skulls" sitemap switch, and the Halloween scene in `rules/scenes.rules`: a red heartbeat at the scene's shared BPM, dark with white flashes at the spooky hour's thunder strikes (like the flowers), OFF when the scene ends, and the heartbeat re-sent if they come back online mid-scene.
+- **hauss-backend**: `skullsController.js` (on the shared `mqttDevice.js`), `GET /skulls/status` and `POST /skulls/command`, the control page `public/skulls.html`, and the skulls section of `public/api.html`. The pattern list there and `PATTERNS` in `skulls.html` are hand-maintained copies of `HELP_TEXT`.
+
 ## Current budget
 
 Each NeoPixel draws up to about 60 mA at full white and about 20 mA for one colour at full brightness. The firmware should cap brightness so the whole chain stays inside the supply.
@@ -324,7 +371,7 @@ The battery pack's boost converter holds its output at 5V until the cells are ne
 
 - **Power source:** openHAB holds a switch (e.g. `Skulls_On_Battery`) that you turn on when the battery is plugged in, and the firmware reads it over MQTT.
 - **Charge estimate:** while on battery, the firmware adds up runtime weighted by LED count and brightness against the pack's ~30 Wh. It saves the total to flash every few minutes so it survives restarts. Turning `Skulls_On_Battery` back on after a recharge resets the counter.
-- **MQTT:** it publishes something like `skulls/status {"power":"battery","batt_hours":18.5,"batt_pct":62}`. Its last will publishes `offline` on the same topic, following led_flowerpot's command/reply/status pattern.
+- **MQTT:** it reports the estimate (e.g. `batt_hours=18.5 batt_pct=62`) in its STATUS reply on `skulls/reply`, or on a topic of its own. Not on `skulls/status`, which stays LWT-only (`online`/`offline`) because openHAB treats every message there as availability.
 - **openHAB:** at about 20% left, a rule pushes an ntfy alert. If the skulls go offline while on battery, it pushes "Skulls offline — battery probably dead".
 
 If the estimate turns out to be unreliable, an INA219 current sensor in the control box can measure the mAh actually used.
