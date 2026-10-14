@@ -253,7 +253,7 @@ MicroPython (v1.28 on the Pico 2 W), in `firmware/`, following led_flowerpot's a
 Commands, over MQTT or USB serial: `ON`, `OFF`, `COLOR <zone> r,g,b`, `PATTERN <zone> heartbeat|flicker|breathe|rainbow [args]`, `BRIGHTNESS 0-100`, `SET STARTUP <command>`, `STATUS`, `HELP`. A zone is `all` or an ornament number from `CHAIN` (1 = nearest the box). `HELP_TEXT` is the full reference. Notes:
 
 - **Heartbeat** uses the same lub-dub curve as the flowers' scary stems. A pattern sent to `all` runs on one clock, so every skull beats together.
-- **`ON` resumes** the last patterns. It boots **OFF** (`SET STARTUP` can change that), since openHAB's Halloween scene decides when the skulls run.
+- **`ON` resumes** the last patterns. It boots **OFF** (`SET STARTUP` can change that), since openHAB decides when the skulls run.
 - **Jack sense:** every tick it reads GP28; without jack power it stops sending data and holds GP22 low. STATUS reports it as `jack=on|off`.
 - **Status:** `power=… jack=… brightness=… ornaments=…`, then one `zone=… pattern=… color=… period=…` line per group of ornaments sharing a pattern.
 
@@ -284,7 +284,7 @@ mpremote connect /dev/ttyACM0 cp net_mqtt.py :net_mqtt.py + cp wifi_secrets.py :
 
 ### Integration
 
-- **openHAB** (house-brain): `things/halloween_skulls.things` (`mqtt:topic:skulls` on the broker bridge), `items/halloween_skulls.items` (`Skulls_Power`, `Skulls_Status`), a "Halloween skulls" sitemap switch, and the Halloween scene in `rules/scenes.rules`: a red heartbeat at the scene's shared BPM, dark with white flashes at the spooky hour's thunder strikes (like the flowers), OFF when the scene ends, and the heartbeat re-sent if they come back online mid-scene.
+- **openHAB** (house-brain): `things/halloween_skulls.things` (`mqtt:topic:skulls` on the broker bridge), `items/halloween_skulls.items` (`Skulls_Power`, `Skulls_Status`), a "Halloween skulls" sitemap switch, and rules that run them like the lighted flowers: `PATTERN all rainbow` from Sunrise Actions (civil dawn, `rules/astro.rules`) to OFF at Nighttime Actions (23:00, `rules/cron.rules`). The Halloween scene in `rules/scenes.rules` overrides that with a red heartbeat at the scene's shared BPM, dark with white flashes at the spooky hour's thunder strikes (like the flowers), and back to rainbow if the scene is cancelled before 23:00. If they come back online, the heartbeat is re-sent mid-scene, or the rainbow while the flowers are on.
 - **hauss-backend**: `skullsController.js` (on the shared `mqttDevice.js`), `GET /skulls/status` and `POST /skulls/command`, the control page `public/skulls.html`, and the skulls section of `public/api.html`. The pattern list there and `PATTERNS` in `skulls.html` are hand-maintained copies of `HELP_TEXT`.
 
 ## Current budget
