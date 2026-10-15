@@ -40,6 +40,12 @@ TOPIC_POWER = b"skulls/power"
 WIFI_CONNECT_TIMEOUT_MS = 15000  # first connect, at boot
 WIFI_RECONNECT_TIMEOUT_MS = 3000  # after a drop; short so patterns don't stall
 RECONNECT_INTERVAL_MS = 5000
+# umqtt.simple never pings on its own, and check_msg() just sees "no data" on
+# a half-open socket, so a session the broker dropped while WiFi was out
+# (2026-10-14: "disconnected: Operation timed out") went unnoticed until a
+# power cycle. Pinging makes the broker answer with an RST, which the next
+# check_msg() raises on, so poll() reconnects.
+PING_INTERVAL_MS = KEEPALIVE_S * 1000 // 2
 
 wlan = network.WLAN(network.STA_IF)
 
@@ -81,6 +87,7 @@ class SkullsMQTT:
         self.client = None
         self.connected = False
         self._last_attempt = 0
+        self._last_ping = 0
         self._first_attempt = True
         self._published_power = None
 
@@ -104,7 +111,13 @@ class SkullsMQTT:
     def _connect(self, wifi_timeout_ms):
         if not wifi_connect(wifi_timeout_ms, feed=self.feed):
             return False
-        client = MQTTClient(CLIENT_ID, BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE_S)
+        if self.client:
+            try:
+                self.client.sock.close()  # the dead session's socket
+            except Exception:
+                pass
+            self.client = None
+        client =MQTTClient(CLIENT_ID, BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE_S)
         client.set_last_will(TOPIC_STATUS, b"offline", retain=True)
         client.set_callback(self._on_message)
         try:
@@ -116,6 +129,7 @@ class SkullsMQTT:
             return False
         self.client = client
         self.connected = True
+        self._last_ping = time.ticks_ms()
         self._published_power = None  # republish power after every reconnect
         print("MQTT connected to", BROKER_HOST)
         return True
@@ -137,6 +151,15 @@ class SkullsMQTT:
             print("MQTT check_msg failed, will reconnect:", e)
             self.connected = False
             return
+
+        if time.ticks_diff(now, self._last_ping) >= PING_INTERVAL_MS:
+            self._last_ping = now
+            try:
+                self.client.ping()
+            except (OSError, MQTTException) as e:
+                print("MQTT ping failed, will reconnect:", e)
+                self.connected = False
+                return
 
         power = self.get_power()
         if power != self._published_power:
